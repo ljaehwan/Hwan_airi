@@ -14,7 +14,13 @@ export const useSettingsStageModel = defineStore('settings-stage-model', () => {
   let stageModelUpdateSequence = 0
   const stageModelStorageKey = 'settings/stage/model'
 
-  const stageModelSelectedState = useLocalStorageManualReset<string>(stageModelStorageKey, 'preset-live2d-1')
+  // Determine the initial default model ID.
+  // Priority: explicit VITE_DEFAULT_MODEL_ID > custom VRM preset > built-in Live2D preset.
+  const defaultModelId
+    = import.meta.env.VITE_DEFAULT_MODEL_ID
+    ?? (import.meta.env.VITE_CUSTOM_VRM_MODEL_URL ? 'preset-vrm-custom' : 'preset-live2d-1')
+
+  const stageModelSelectedState = useLocalStorageManualReset<string>(stageModelStorageKey, defaultModelId)
   const stageModelSelected = computed<string>({
     get: () => stageModelSelectedState.value,
     set: (value) => {
