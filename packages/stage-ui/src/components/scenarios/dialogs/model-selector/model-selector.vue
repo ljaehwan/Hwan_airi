@@ -59,6 +59,42 @@ function handleAddVRMModel(file: FileList | null) {
   displayModelStore.addDisplayModel(DisplayModelFormat.VRM, file[0])
 }
 
+// URL import state
+const showUrlInput = ref(false)
+const urlInputValue = ref('')
+const urlInputName = ref('')
+const urlInputError = ref('')
+
+function openUrlInput() {
+  urlInputValue.value = ''
+  urlInputName.value = ''
+  urlInputError.value = ''
+  showUrlInput.value = true
+}
+
+function cancelUrlInput() {
+  showUrlInput.value = false
+  urlInputError.value = ''
+}
+
+async function confirmUrlInput() {
+  const url = urlInputValue.value.trim()
+  const name = urlInputName.value.trim()
+
+  if (!url) {
+    urlInputError.value = 'Please enter a URL'
+    return
+  }
+  if (!url.endsWith('.vrm')) {
+    urlInputError.value = 'URL must point to a .vrm file'
+    return
+  }
+
+  await displayModelStore.addDisplayModelFromUrl(DisplayModelFormat.VRM, url, name || url.split('/').pop() || 'VRM Model')
+  showUrlInput.value = false
+  urlInputError.value = ''
+}
+
 const mapFormatRenderer: Record<DisplayModelFormat, string> = {
   [DisplayModelFormat.Live2dZip]: 'Live2D',
   [DisplayModelFormat.Live2dDirectory]: 'Live2D',
@@ -125,11 +161,73 @@ vrmDialog.onChange(handleAddVRMModel)
               >
                 VRM
               </DropdownMenuItem>
+              <DropdownMenuItem
+                :class="[
+                  'data-[disabled]:text-mauve8 relative flex cursor-pointer select-none items-center rounded-md px-3 py-2 leading-none outline-none data-[disabled]:pointer-events-none',
+                  'text-base sm:text-sm',
+                  'data-[highlighted]:bg-primary-300/20 dark:data-[highlighted]:bg-primary-100/20',
+                  'data-[highlighted]:text-primary-400 dark:data-[highlighted]:text-primary-200',
+                ]"
+                transition="colors duration-200 ease-in-out" @click="openUrlInput()"
+              >
+                VRM (URL)
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenuPortal>
         </DropdownMenuRoot>
       </div>
     </div>
+
+    <!-- VRM URL import form -->
+    <div
+      v-if="showUrlInput"
+      :class="['flex flex-col gap-2 rounded-xl p-3', 'bg-neutral-100/80 dark:bg-neutral-800/80', 'border border-neutral-200 dark:border-neutral-700']"
+    >
+      <div text-sm font-medium>
+        Import VRM from URL
+      </div>
+      <input
+        v-model="urlInputName"
+        :class="[
+          'w-full rounded-lg border px-3 py-2 text-sm outline-none',
+          'border-neutral-300 dark:border-neutral-600',
+          'bg-white dark:bg-neutral-900',
+          'placeholder:text-neutral-400 dark:placeholder:text-neutral-500',
+          'focus:border-primary-400 dark:focus:border-primary-500',
+          'transition-colors duration-150',
+        ]"
+        aria-label="Model name"
+        placeholder="Model name (optional)"
+      >
+      <input
+        v-model="urlInputValue"
+        :class="[
+          'w-full rounded-lg border px-3 py-2 text-sm outline-none',
+          'border-neutral-300 dark:border-neutral-600',
+          'bg-white dark:bg-neutral-900',
+          'placeholder:text-neutral-400 dark:placeholder:text-neutral-500',
+          'focus:border-primary-400 dark:focus:border-primary-500',
+          'transition-colors duration-150',
+          urlInputError ? 'border-red-400 dark:border-red-500' : '',
+        ]"
+        aria-label="VRM model URL"
+        placeholder="Enter VRM model URL (e.g. https://example.com/model.vrm)"
+        @keyup.enter="confirmUrlInput()"
+        @keyup.escape="cancelUrlInput()"
+      >
+      <div v-if="urlInputError" text="red-500 dark:red-400 xs">
+        {{ urlInputError }}
+      </div>
+      <div flex gap-2>
+        <Button size="sm" @click="confirmUrlInput()">
+          Load
+        </Button>
+        <Button size="sm" variant="secondary" @click="cancelUrlInput()">
+          Cancel
+        </Button>
+      </div>
+    </div>
+
     <div v-if="displayModelsFromIndexedDBLoading">
       Loading display models...
     </div>

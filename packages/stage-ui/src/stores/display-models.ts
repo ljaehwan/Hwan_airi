@@ -70,9 +70,15 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
     const models = [...displayModelsPresets]
 
     try {
-      await localforage.iterate<{ format: DisplayModelFormat, file: File, importedAt: number, previewImage?: string }, void>((val, key) => {
+      await localforage.iterate<DisplayModel, void>((val, key) => {
         if (key.startsWith('display-model-')) {
-          models.push({ id: key, format: val.format, type: 'file', file: val.file, name: val.file.name, importedAt: val.importedAt, previewImage: val.previewImage })
+          if (val.type === 'url') {
+            models.push(val)
+          }
+          else {
+            const fileModel = val as DisplayModelFile
+            models.push({ id: key, format: fileModel.format, type: 'file', file: fileModel.file, name: fileModel.file.name, importedAt: fileModel.importedAt, previewImage: fileModel.previewImage })
+          }
         }
       })
     }
@@ -86,9 +92,9 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
 
   async function getDisplayModel(id: string) {
     await until(displayModelsFromIndexedDBLoading).toBe(false)
-    const modelFromFile = await localforage.getItem<DisplayModelFile>(id)
-    if (modelFromFile) {
-      return modelFromFile
+    const storedModel = await localforage.getItem<DisplayModel>(id)
+    if (storedModel) {
+      return storedModel
     }
 
     // Fallback to in-memory presets if not found in localforage
@@ -99,6 +105,16 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
 
   async function loadVrmModelPreview(file: File) {
     return generateVrmPreview(file)
+  }
+
+  async function addDisplayModelFromUrl(format: DisplayModelFormat, url: string, name: string) {
+    await until(displayModelsFromIndexedDBLoading).toBe(false)
+    const newDisplayModel: DisplayModelURL = { id: `display-model-${nanoid()}`, format, type: 'url', url, name, importedAt: Date.now() }
+
+    displayModels.value.unshift(newDisplayModel)
+
+    localforage.setItem<DisplayModelURL>(newDisplayModel.id, newDisplayModel)
+      .catch(err => console.error(err))
   }
 
   async function addDisplayModel(format: DisplayModelFormat, file: File) {
@@ -137,7 +153,10 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
 
   async function resetDisplayModels() {
     await loadDisplayModelsFromIndexedDB()
-    const userModelIds = displayModels.value.filter(model => model.type === 'file').map(model => model.id)
+    // Remove all user-defined models (both file and URL types), identified by their ID prefix
+    const userModelIds = displayModels.value
+      .filter(model => model.id.startsWith('display-model-'))
+      .map(model => model.id)
     for (const id of userModelIds) {
       await removeDisplayModel(id)
     }
@@ -152,6 +171,7 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
     loadDisplayModelsFromIndexedDB,
     getDisplayModel,
     addDisplayModel,
+    addDisplayModelFromUrl,
     renameDisplayModel,
     removeDisplayModel,
     resetDisplayModels,
