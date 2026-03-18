@@ -31,6 +31,18 @@ const presetVrmAvatarAPreview = new URL('../assets/vrm/models/AvatarSample-A/pre
 const presetVrmAvatarBUrl = new URL('../assets/vrm/models/AvatarSample-B/AvatarSample_B.vrm', import.meta.url).href
 const presetVrmAvatarBPreview = new URL('../assets/vrm/models/AvatarSample-B/preview.png', import.meta.url).href
 
+// NOTICE: Sentinel timestamp shared by all built-in preset entries so they sort together
+// (behind user-imported models which use Date.now()). The specific value corresponds to
+// 2024-12-02 and was established when the preset system was first introduced.
+const BUILTIN_PRESET_TIMESTAMP = 1733113886840
+
+// Custom VRM model configured via environment variable (VITE_CUSTOM_VRM_MODEL_URL).
+// When set, the model is registered as the "preset-vrm-custom" preset and appears first
+// in the model selector so it can be picked immediately.
+const customVrmModelUrl = import.meta.env.VITE_CUSTOM_VRM_MODEL_URL
+const customVrmModelName = import.meta.env.VITE_CUSTOM_VRM_MODEL_NAME ?? 'Custom Model'
+const customVrmModelPreview = import.meta.env.VITE_CUSTOM_VRM_MODEL_PREVIEW_URL
+
 export interface DisplayModelFile {
   id: string
   format: DisplayModelFormat
@@ -52,10 +64,22 @@ export interface DisplayModelURL {
 }
 
 const displayModelsPresets: DisplayModel[] = [
-  { id: 'preset-live2d-1', format: DisplayModelFormat.Live2dZip, type: 'url', url: presetLive2dProUrl, name: 'Hiyori (Pro)', previewImage: presetLive2dPreview, importedAt: 1733113886840 },
-  { id: 'preset-live2d-2', format: DisplayModelFormat.Live2dZip, type: 'url', url: presetLive2dFreeUrl, name: 'Hiyori (Free)', previewImage: presetLive2dPreview, importedAt: 1733113886840 },
-  { id: 'preset-vrm-1', format: DisplayModelFormat.VRM, type: 'url', url: presetVrmAvatarAUrl, name: 'AvatarSample_A', previewImage: presetVrmAvatarAPreview, importedAt: 1733113886840 },
-  { id: 'preset-vrm-2', format: DisplayModelFormat.VRM, type: 'url', url: presetVrmAvatarBUrl, name: 'AvatarSample_B', previewImage: presetVrmAvatarBPreview, importedAt: 1733113886840 },
+  // Custom VRM model from environment variable — placed first so it is prominent in the selector.
+  ...(customVrmModelUrl
+    ? [{
+        id: 'preset-vrm-custom',
+        format: DisplayModelFormat.VRM,
+        type: 'url' as const,
+        url: customVrmModelUrl,
+        name: customVrmModelName,
+        previewImage: customVrmModelPreview,
+        importedAt: BUILTIN_PRESET_TIMESTAMP,
+      }]
+    : []),
+  { id: 'preset-live2d-1', format: DisplayModelFormat.Live2dZip, type: 'url', url: presetLive2dProUrl, name: 'Hiyori (Pro)', previewImage: presetLive2dPreview, importedAt: BUILTIN_PRESET_TIMESTAMP },
+  { id: 'preset-live2d-2', format: DisplayModelFormat.Live2dZip, type: 'url', url: presetLive2dFreeUrl, name: 'Hiyori (Free)', previewImage: presetLive2dPreview, importedAt: BUILTIN_PRESET_TIMESTAMP },
+  { id: 'preset-vrm-1', format: DisplayModelFormat.VRM, type: 'url', url: presetVrmAvatarAUrl, name: 'AvatarSample_A', previewImage: presetVrmAvatarAPreview, importedAt: BUILTIN_PRESET_TIMESTAMP },
+  { id: 'preset-vrm-2', format: DisplayModelFormat.VRM, type: 'url', url: presetVrmAvatarBUrl, name: 'AvatarSample_B', previewImage: presetVrmAvatarBPreview, importedAt: BUILTIN_PRESET_TIMESTAMP },
 ]
 
 export const useDisplayModelsStore = defineStore('display-models', () => {
