@@ -746,6 +746,9 @@ pages:
       player2:
         description: player2.game
         title: Player2
+      qwen3-tts:
+        description: Local Qwen3-TTS server (localhost:8000)
+        title: Qwen3 TTS (Local)
       together:
         description: together.ai
         title: Together.ai
