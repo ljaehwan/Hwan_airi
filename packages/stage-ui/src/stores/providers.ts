@@ -1293,6 +1293,95 @@ export const useProvidersStore = defineStore('providers', () => {
         },
       },
     },
+    'qwen3-tts': {
+      id: 'qwen3-tts',
+      category: 'speech',
+      tasks: ['text-to-speech'],
+      nameKey: 'settings.pages.providers.provider.qwen3-tts.title',
+      name: 'Qwen TTS',
+      descriptionKey: 'settings.pages.providers.provider.qwen3-tts.description',
+      description: 'dashscope.aliyuncs.com',
+      iconColor: 'i-lobe-icons:qwen-color',
+      defaultOptions: () => ({
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/',
+      }),
+      createProvider: async (config) => {
+        const apiKey = (config.apiKey as string).trim()
+        const baseUrl = (config.baseUrl as string).trim()
+        return merge(
+          createSpeechProvider({ apiKey, baseURL: baseUrl }),
+        )
+      },
+      capabilities: {
+        listVoices: async () => {
+          // DashScope Qwen-TTS voices (hardcoded as there is no listing API)
+          const voices = [
+            { id: 'longhua', name: 'Longhua (中文女声)', languages: ['zh-CN'], gender: 'female' },
+            { id: 'longxiaochun', name: 'Longxiaochun (中文女声)', languages: ['zh-CN'], gender: 'female' },
+            { id: 'longxiaoxia', name: 'Longxiaoxia (中文女声)', languages: ['zh-CN'], gender: 'female' },
+            { id: 'longlaoshi', name: 'Longlaoshi (中文男声)', languages: ['zh-CN'], gender: 'male' },
+            { id: 'longshu', name: 'Longshu (中文男声)', languages: ['zh-CN'], gender: 'male' },
+            { id: 'longshuo', name: 'Longshuo (中文男声)', languages: ['zh-CN'], gender: 'male' },
+            { id: 'longyue', name: 'Longyue (中文女声)', languages: ['zh-CN'], gender: 'female' },
+            { id: 'longyuan', name: 'Longyuan (中文男声)', languages: ['zh-CN'], gender: 'male' },
+            { id: 'longfei', name: 'Longfei (中文男声)', languages: ['zh-CN'], gender: 'male' },
+            { id: 'longjing', name: 'Longjing (中文男声)', languages: ['zh-CN'], gender: 'male' },
+            { id: 'loong', name: 'Loong (中文男声)', languages: ['zh-CN'], gender: 'male' },
+            { id: 'loongstella', name: 'Loongstella (English Female)', languages: ['en-US'], gender: 'female' },
+            { id: 'cherry', name: 'Cherry (English Female)', languages: ['en-US'], gender: 'female' },
+            { id: 'serene', name: 'Serene (English Female)', languages: ['en-US'], gender: 'female' },
+            { id: 'ethan', name: 'Ethan (English Male)', languages: ['en-US'], gender: 'male' },
+            { id: 'chelsie', name: 'Chelsie (English Female)', languages: ['en-US'], gender: 'female' },
+          ]
+          return voices.map(voice => ({
+            id: voice.id,
+            name: voice.name,
+            provider: 'qwen3-tts',
+            languages: voice.languages.map(code => ({ code, title: code })),
+            gender: voice.gender,
+          }))
+        },
+        listModels: async () => {
+          return [
+            {
+              id: 'qwen-tts-turbo',
+              name: 'Qwen TTS Turbo',
+              provider: 'qwen3-tts',
+              description: 'Fast, high-quality Qwen TTS model',
+              contextLength: 0,
+              deprecated: false,
+            },
+            {
+              id: 'qwen-tts',
+              name: 'Qwen TTS',
+              provider: 'qwen3-tts',
+              description: 'Standard Qwen TTS model',
+              contextLength: 0,
+              deprecated: false,
+            },
+          ]
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          const errors = [
+            !config.apiKey && new Error('API key is required.'),
+            !config.baseUrl && new Error('Base URL is required.'),
+          ].filter(Boolean)
+
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
+          }
+
+          return {
+            errors,
+            reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
+            valid: !!config.apiKey && !!config.baseUrl,
+          }
+        },
+      },
+    },
     'volcengine': {
       id: 'volcengine',
       category: 'speech',

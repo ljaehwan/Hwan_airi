@@ -571,6 +571,9 @@ pages:
       alibaba-cloud-model-studio:
         description: bailian.console.aliyun.com
         title: 阿里百煉
+      qwen3-tts:
+        description: dashscope.aliyuncs.com
+        title: 通義語音 (Qwen TTS)
       anthropic:
         description: anthropic.com
         title: Anthropic | Claude
