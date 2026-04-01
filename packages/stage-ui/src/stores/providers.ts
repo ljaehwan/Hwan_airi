@@ -2218,6 +2218,77 @@ export const useProvidersStore = defineStore('providers', () => {
         },
       },
     },
+    'qwen3-tts': {
+      id: 'qwen3-tts',
+      category: 'speech',
+      tasks: ['text-to-speech'],
+      nameKey: 'settings.pages.providers.provider.qwen3-tts.title',
+      name: 'Qwen3 TTS (Local)',
+      descriptionKey: 'settings.pages.providers.provider.qwen3-tts.description',
+      description: 'Local Qwen3-TTS via Docker',
+      icon: 'i-lobe-icons:qwen',
+      defaultOptions: () => ({
+        baseUrl: 'http://localhost:8000',
+        model: 'qwen3-tts',
+      }),
+      createProvider: async (config) => {
+        const provider: SpeechProvider = {
+          speech: () => {
+            return {
+              baseURL: config.baseUrl as string,
+              model: (config.model as string) || 'qwen3-tts',
+            }
+          },
+        }
+        return provider
+      },
+      capabilities: {
+        listVoices: async (_config) => {
+          return [
+            { id: 'Sohee', name: 'Sohee (한국 여성)', provider: 'qwen3-tts', languages: [{ code: 'ko', title: 'Korean' }] },
+            { id: 'Chiyou', name: 'Chiyou (한국 남성)', provider: 'qwen3-tts', languages: [{ code: 'ko', title: 'Korean' }] },
+            { id: '__instruct__', name: '🎨 커스텀 프롬프트 (Instruct 모드)', provider: 'qwen3-tts', languages: [] },
+          ]
+        },
+      },
+      validators: {
+        validateProviderConfig: async (config) => {
+          if (!config.baseUrl) {
+            return {
+              errors: [new Error('Base URL is required. Default: http://localhost:8000')],
+              reason: 'Base URL is required',
+              valid: false,
+            }
+          }
+
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res)
+            return res
+
+          try {
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(), 5000)
+            const response = await fetch(`${config.baseUrl as string}/v1/audio/voices`, { signal: controller.signal })
+            clearTimeout(timeout)
+
+            if (!response.ok) {
+              const reason = `Qwen3-TTS unreachable: HTTP ${response.status} ${response.statusText}`
+              return { errors: [new Error(reason)], reason, valid: false }
+            }
+          }
+          catch (err) {
+            const reason = `Qwen3-TTS connection failed: ${String(err)}`
+            return { errors: [err as Error], reason, valid: false }
+          }
+
+          return {
+            errors: [],
+            reason: '',
+            valid: true,
+          }
+        },
+      },
+    },
   }
 
   // Progressive migration bridge:
