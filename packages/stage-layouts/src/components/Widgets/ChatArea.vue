@@ -10,6 +10,7 @@ import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consci
 import { useHearingSpeechInputPipeline, useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
 import { useSettings, useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
+import { useSpeechRuntimeStore } from '@proj-airi/stage-ui/stores/speech-runtime'
 import { BasicTextarea, FieldSelect } from '@proj-airi/ui'
 import { until } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -23,8 +24,10 @@ const messageInput = ref('')
 const hearingPopoverOpen = ref(false)
 const isComposing = ref(false)
 const isListening = ref(false) // Transcription listening state (separate from microphone enabled)
+const transcriptionSuspendedByPlayback = ref(false)
 
 const providersStore = useProvidersStore()
+const speechRuntimeStore = useSpeechRuntimeStore()
 const { activeProvider, activeModel } = storeToRefs(useConsciousnessStore())
 const { themeColorsHueDynamic } = storeToRefs(useSettings())
 
@@ -43,6 +46,7 @@ const hearingPipeline = useHearingSpeechInputPipeline()
 const { transcribeForMediaStream, stopStreamingTranscription } = hearingPipeline
 const { supportsStreamInput } = storeToRefs(hearingPipeline)
 const { configured: hearingConfigured, autoSendEnabled, autoSendDelay } = storeToRefs(hearingStore)
+const { isPlaying } = storeToRefs(speechRuntimeStore)
 const shouldUseStreamInput = computed(() => supportsStreamInput.value && !!stream.value)
 
 // Auto-send logic
@@ -186,6 +190,11 @@ onUnmounted(() => {
 
 // Transcription listening functions
 async function startListening() {
+  if (isPlaying.value) {
+    console.info('[ChatArea] Skipping transcription start while speech playback is active')
+    return
+  }
+
   // Allow calling this even if already listening - transcribeForMediaStream will handle session reuse/restart
   try {
     console.info('[ChatArea] Starting listening...', {
@@ -325,9 +334,11 @@ async function startListening() {
   }
 }
 
-async function stopListening() {
+async function stopListening(options?: { flushPendingAutoSend?: boolean }) {
   if (!isListening.value)
     return
+
+  const flushPendingAutoSend = options?.flushPendingAutoSend ?? true
 
   try {
     console.info('[ChatArea] Stopping transcription...')
@@ -336,7 +347,7 @@ async function stopListening() {
     clearPendingAutoSend()
 
     // Send any pending text immediately if auto-send is enabled
-    if (autoSendEnabled.value && pendingAutoSendText.value.trim()) {
+    if (flushPendingAutoSend && autoSendEnabled.value && pendingAutoSendText.value.trim()) {
       const textToSend = pendingAutoSendText.value.trim()
       pendingAutoSendText.value = ''
       try {
@@ -365,7 +376,7 @@ async function stopListening() {
 
 // Start listening when microphone is enabled and stream is available
 watch(enabled, async (val) => {
-  if (val && stream.value) {
+  if (val && stream.value && !isPlaying.value) {
     // Microphone was just enabled and we have a stream, start transcription
     await startListening()
   }
@@ -377,7 +388,7 @@ watch(enabled, async (val) => {
 
 // Start listening when stream becomes available (if microphone is enabled)
 watch(stream, async (val) => {
-  if (val && enabled.value && !isListening.value) {
+  if (val && enabled.value && !isListening.value && !isPlaying.value) {
     // Stream became available and microphone is enabled, start transcription
     await startListening()
   }
@@ -393,6 +404,27 @@ watch(autoSendEnabled, (enabled) => {
     // Auto-send was disabled - clear any pending auto-send
     clearPendingAutoSend()
     console.info('[ChatArea] Auto-send disabled, cleared pending text')
+  }
+})
+
+watch(isPlaying, async (playing) => {
+  if (playing) {
+    if (enabled.value && isListening.value) {
+      transcriptionSuspendedByPlayback.value = true
+      await stopListening({ flushPendingAutoSend: false })
+      console.info('[ChatArea] Paused microphone transcription during speech playback')
+    }
+    return
+  }
+
+  if (!transcriptionSuspendedByPlayback.value)
+    return
+
+  transcriptionSuspendedByPlayback.value = false
+
+  if (enabled.value && stream.value && !isListening.value) {
+    await startListening()
+    console.info('[ChatArea] Resumed microphone transcription after speech playback')
   }
 })
 </script>

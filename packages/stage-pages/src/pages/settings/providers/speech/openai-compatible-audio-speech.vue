@@ -28,6 +28,13 @@ const defaultVoiceSettings = {
 const providerId = 'openai-compatible-audio-speech'
 const defaultModel = 'tts-1'
 
+const {
+  isValidating,
+  isValid,
+  validationMessage,
+  forceValid,
+} = useProviderValidation(providerId)
+
 // Initialize speed from provider config or default
 const speed = ref<number>(
   (providers.value[providerId] as any)?.voiceSettings?.speed
@@ -42,6 +49,15 @@ const model = computed({
     if (!providers.value[providerId])
       providers.value[providerId] = {}
     providers.value[providerId].model = value
+  },
+})
+
+const baseUrl = computed({
+  get: () => providers.value[providerId]?.baseUrl as string | undefined || '',
+  set: (value) => {
+    if (!providers.value[providerId])
+      providers.value[providerId] = {}
+    providers.value[providerId].baseUrl = value
   },
 })
 
@@ -84,8 +100,10 @@ watch(
   { deep: true, immediate: true },
 )
 
-// Check if API key is configured
-const apiKeyConfigured = computed(() => !!providers.value[providerId]?.apiKey)
+const canGenerateSpeech = computed(() => {
+  const hasApiKey = typeof providers.value[providerId]?.apiKey === 'string' && providers.value[providerId].apiKey.trim().length > 0
+  return isValid.value || hasApiKey
+})
 
 // Ensure provider config is initialized on mount
 onMounted(() => {
@@ -149,14 +167,6 @@ watch(voice, () => {
   providers.value[providerId].voice = voice.value
 })
 
-// Use the composable to get validation logic and state
-const {
-  isValidating,
-  isValid,
-  validationMessage,
-  forceValid,
-} = useProviderValidation(providerId)
-
 const apiKeyPlaceholder = computed(() => {
   const definition = getDefinedProvider(providerId)
   if (!definition?.createProviderConfig)
@@ -179,7 +189,17 @@ const apiKeyPlaceholder = computed(() => {
     :default-model="defaultModel"
     :additional-settings="defaultVoiceSettings"
     :placeholder="apiKeyPlaceholder"
+    :show-base-url-input="false"
   >
+    <template #basic-settings>
+      <FieldInput
+        v-model="baseUrl"
+        label="Base URL"
+        description="OpenAI-compatible TTS endpoint base URL"
+        placeholder="http://192.168.0.35:8880/v1/"
+      />
+    </template>
+
     <!-- Voice settings specific to OpenAI Compatible -->
     <template #voice-settings>
       <!-- Model input -->
@@ -204,7 +224,8 @@ const apiKeyPlaceholder = computed(() => {
         v-model:model-value="model"
         v-model:voice="voice as any"
         :generate-speech="handleGenerateSpeech"
-        :api-key-configured="apiKeyConfigured"
+        :api-key-configured="canGenerateSpeech"
+        :configuration-error-message="validationMessage"
         default-text="Hello! This is a test of the OpenAI Compatible Speech."
       />
     </template>

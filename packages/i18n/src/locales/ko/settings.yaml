@@ -725,6 +725,15 @@ pages:
       ollama:
         description: ollama.ai
         title: Ollama
+      auralis-speech:
+        description: Auralis XTTSv2 음성 클로닝 서버
+        title: Auralis
+      gpt-sovits:
+        description: 공식 GPT-SoVITS 소수 샘플 음성 클로닝 서버
+        title: GPT-SoVITS
+      fish-speech:
+        description: 한국어와 인라인 스타일 태그를 지원하는 Fish Audio S2 서버.
+        title: Fish Speech
       openai:
         description: openai.com
         title: OpenAI

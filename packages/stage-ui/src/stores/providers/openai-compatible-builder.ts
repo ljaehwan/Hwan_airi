@@ -50,6 +50,7 @@ export function buildOpenAICompatibleProvider(
     validation?: ('health' | 'model_list' | 'chat_completions')[]
     additionalHeaders?: Record<string, string>
     transcriptionFeatures?: ProviderMetadata['transcriptionFeatures']
+    requireApiKey?: boolean
   },
 ): ProviderMetadata {
   const {
@@ -68,6 +69,7 @@ export function buildOpenAICompatibleProvider(
     validation,
     additionalHeaders,
     transcriptionFeatures,
+    requireApiKey = true,
     ...rest
   } = options
 
@@ -78,7 +80,7 @@ export function buildOpenAICompatibleProvider(
       const baseUrl = normalizeBaseUrl(config.baseUrl)
 
       // If not configured yet, avoid remote calls and return empty
-      if (!apiKey || !baseUrl) {
+      if (!baseUrl || (requireApiKey && !apiKey)) {
         return []
       }
 
@@ -90,7 +92,7 @@ export function buildOpenAICompatibleProvider(
 
       // Previously: fetch(`${baseUrl}models`)
       const models = await listModels({
-        apiKey,
+        ...(apiKey ? { apiKey } : {}),
         baseURL: baseUrl,
         headers: additionalHeaders,
       })
@@ -119,7 +121,7 @@ export function buildOpenAICompatibleProvider(
       let baseUrl = normalizeString(config.baseUrl)
       const apiKey = normalizeString(config.apiKey)
 
-      if (!apiKey) {
+      if (requireApiKey && !apiKey) {
         errors.push(new Error('API Key is required'))
       }
 

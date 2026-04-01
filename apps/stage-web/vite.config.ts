@@ -21,6 +21,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 const stageUIAssetsRoot = resolve(join(import.meta.dirname, '..', '..', 'packages', 'stage-ui', 'src', 'assets'))
 const sharedCacheDir = resolve(join(import.meta.dirname, '..', '..', '.cache'))
+const speachesProxyTarget = env.VITE_SPEACHES_PROXY_TARGET?.trim()
 
 export default defineConfig({
   optimizeDeps: {
@@ -74,6 +75,16 @@ export default defineConfig({
         `${resolve(join(import.meta.dirname, '..', '..', 'packages', 'stage-pages', 'src'))}/*.vue`,
       ],
     },
+    proxy: speachesProxyTarget
+      ? {
+          '/__speaches_proxy__': {
+            target: speachesProxyTarget,
+            changeOrigin: true,
+            secure: false,
+            rewrite: path => path.replace(/^\/__speaches_proxy__/, ''),
+          },
+        }
+      : undefined,
   },
   build: {
     sourcemap: true,

@@ -757,6 +757,15 @@ pages:
       ollama:
         description: ollama.ai
         title: Ollama
+      auralis-speech:
+        description: Auralis XTTSv2 voice cloning server
+        title: Auralis
+      gpt-sovits:
+        description: Official GPT-SoVITS few-shot voice cloning server
+        title: GPT-SoVITS
+      fish-speech:
+        description: Fish Audio S2 server with Korean and inline style tags.
+        title: Fish Speech
       openai:
         description: openai.com
         title: OpenAI

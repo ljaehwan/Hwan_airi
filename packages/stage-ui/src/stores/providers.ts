@@ -20,6 +20,7 @@ import type {
 
 import type { AliyunRealtimeSpeechExtraOptions } from './providers/aliyun/stream-transcription'
 
+import { encode } from '@msgpack/msgpack'
 import { isStageTamagotchi, isUrl } from '@proj-airi/stage-shared'
 import { computedAsync, useIntervalFn, useLocalStorage } from '@vueuse/core'
 import {
@@ -580,6 +581,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'Connect to any API that follows the OpenAI specification.',
       category: 'speech',
       tasks: ['text-to-speech'],
+      requireApiKey: false,
       capabilities: {
         listVoices: async () => {
           return []
@@ -592,7 +594,7 @@ export const useProvidersStore = defineStore('providers', () => {
           if (!baseUrl.endsWith('/'))
             baseUrl += '/'
 
-          if (!apiKey || !baseUrl) {
+          if (!baseUrl) {
             return []
           }
 
@@ -602,7 +604,7 @@ export const useProvidersStore = defineStore('providers', () => {
           }
 
           const models = await listModels({
-            apiKey,
+            ...(apiKey ? { apiKey } : {}),
             baseURL: baseUrl,
           })
 
@@ -627,6 +629,324 @@ export const useProvidersStore = defineStore('providers', () => {
       },
       creator: createOpenAI,
     }),
+    'auralis-speech': {
+      id: 'auralis-speech',
+      category: 'speech',
+      tasks: ['text-to-speech', 'tts', 'voice-cloning'],
+      nameKey: 'settings.pages.providers.provider.auralis-speech.title',
+      name: 'Auralis',
+      descriptionKey: 'settings.pages.providers.provider.auralis-speech.description',
+      description: 'Open-source XTTSv2 voice cloning via Auralis.',
+      icon: 'i-lobe-icons:huggingface',
+      defaultOptions: () => ({
+        apiKey: 'auralis',
+        baseUrl: 'http://localhost:8000/v1/',
+        model: 'xttsv2',
+        voice: 'reference',
+        language: 'auto',
+        speed: 1.0,
+        speakerFiles: [],
+        speakerFileNames: [],
+      }),
+      createProvider: async (config) => {
+        const baseURL = typeof config.baseUrl === 'string' && config.baseUrl.trim().length > 0
+          ? config.baseUrl.trim()
+          : 'http://localhost:8000/v1/'
+        const speakerFiles = Array.isArray(config.speakerFiles)
+          ? config.speakerFiles.filter((value): value is string => typeof value === 'string' && value.length > 0)
+          : []
+        const defaultLanguage = typeof config.language === 'string' && config.language.trim().length > 0
+          ? config.language.trim()
+          : 'auto'
+        const defaultSpeed = typeof config.speed === 'number' && Number.isFinite(config.speed)
+          ? config.speed
+          : 1.0
+
+        const provider: SpeechProvider = {
+          speech: (model: string, extraOptions?: Record<string, unknown>) => ({
+            baseURL: baseURL.endsWith('/') ? baseURL : `${baseURL}/`,
+            model,
+            fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+              const requestUrl = typeof input === 'string'
+                ? input
+                : input instanceof URL
+                  ? input.toString()
+                  : input.url
+
+              if (!init?.body || typeof init.body !== 'string') {
+                throw new Error('Auralis request body is invalid.')
+              }
+
+              if (speakerFiles.length <= 0) {
+                throw new Error('Auralis requires at least one reference audio file.')
+              }
+
+              const body = JSON.parse(init.body) as Record<string, unknown>
+              const speed = typeof extraOptions?.speed === 'number' && Number.isFinite(extraOptions.speed)
+                ? extraOptions.speed
+                : defaultSpeed
+              const language = typeof extraOptions?.language === 'string' && extraOptions.language.trim().length > 0
+                ? extraOptions.language.trim()
+                : defaultLanguage
+
+              const payload = {
+                input: body.input,
+                model: body.model,
+                voice: speakerFiles,
+                speaker_files: speakerFiles,
+                response_format: 'wav',
+                speed,
+                language,
+                enhance_speech: true,
+              }
+
+              return await fetch(requestUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+              })
+            },
+          }),
+        }
+
+        return provider
+      },
+      capabilities: {
+        listModels: async () => {
+          return [
+            {
+              id: 'xttsv2',
+              name: 'XTTSv2',
+              provider: 'auralis-speech',
+              description: 'Auralis XTTSv2 OpenAI-compatible speech endpoint',
+              contextLength: 0,
+              deprecated: false,
+            },
+          ]
+        },
+        listVoices: async (config) => {
+          const names = Array.isArray(config.speakerFileNames)
+            ? config.speakerFileNames.filter((value): value is string => typeof value === 'string' && value.length > 0)
+            : []
+
+          return [
+            {
+              id: 'reference',
+              name: names.length > 0 ? `Reference (${names.length})` : 'Reference Voice',
+              provider: 'auralis-speech',
+              description: names.length > 0 ? names.join(', ') : 'Upload one or more reference audio files.',
+              languages: [
+                {
+                  code: 'ko-KR',
+                  title: 'Korean',
+                },
+              ],
+            },
+          ]
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          const errors: Error[] = []
+          const baseUrlValidation = baseUrlValidator.value(config.baseUrl)
+          if (baseUrlValidation) {
+            errors.push(...(baseUrlValidation.errors as Error[]))
+          }
+
+          const speakerFiles = Array.isArray(config.speakerFiles)
+            ? config.speakerFiles.filter((value): value is string => typeof value === 'string' && value.length > 0)
+            : []
+
+          if (speakerFiles.length <= 0) {
+            errors.push(new Error('At least one reference audio file is required.'))
+          }
+
+          return {
+            errors,
+            reason: errors.map(error => error.message).join(', '),
+            valid: errors.length === 0,
+          }
+        },
+      },
+    },
+    'fish-speech': {
+      id: 'fish-speech',
+      category: 'speech',
+      tasks: ['text-to-speech', 'tts', 'voice-cloning', 'style-control'],
+      nameKey: 'settings.pages.providers.provider.fish-speech.title',
+      name: 'Fish Speech',
+      descriptionKey: 'settings.pages.providers.provider.fish-speech.description',
+      description: 'Fish Audio S2 server with Korean support and inline style tags.',
+      icon: 'i-simple-icons:docker',
+      defaultOptions: () => ({
+        apiKey: '',
+        baseUrl: 'http://localhost:8080/v1/',
+        model: 's2-pro',
+        voice: 'default',
+        referenceId: '',
+        format: 'wav',
+        temperature: 0.8,
+        topP: 0.8,
+        repetitionPenalty: 1.1,
+        chunkLength: 200,
+      }),
+      createProvider: async (config) => {
+        const baseURL = typeof config.baseUrl === 'string' && config.baseUrl.trim().length > 0
+          ? config.baseUrl.trim()
+          : 'http://localhost:8080/v1/'
+        const apiKey = typeof config.apiKey === 'string' ? config.apiKey.trim() : ''
+        const defaultReferenceId = typeof config.referenceId === 'string' ? config.referenceId.trim() : ''
+        const defaultFormat = typeof config.format === 'string' && config.format.trim().length > 0
+          ? config.format.trim()
+          : 'wav'
+        const defaultTemperature = typeof config.temperature === 'number' && Number.isFinite(config.temperature)
+          ? config.temperature
+          : 0.8
+        const defaultTopP = typeof config.topP === 'number' && Number.isFinite(config.topP)
+          ? config.topP
+          : 0.8
+        const defaultRepetitionPenalty = typeof config.repetitionPenalty === 'number' && Number.isFinite(config.repetitionPenalty)
+          ? config.repetitionPenalty
+          : 1.1
+        const defaultChunkLength = typeof config.chunkLength === 'number' && Number.isFinite(config.chunkLength)
+          ? config.chunkLength
+          : 200
+
+        const provider: SpeechProvider = {
+          speech: (model: string, extraOptions?: Record<string, unknown>) => ({
+            baseURL: baseURL.endsWith('/') ? baseURL : `${baseURL}/`,
+            model,
+            fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+              if (!init?.body || typeof init.body !== 'string') {
+                throw new Error('Fish Speech request body is invalid.')
+              }
+
+              const body = JSON.parse(init.body) as Record<string, unknown>
+              const referenceId = typeof extraOptions?.referenceId === 'string' && extraOptions.referenceId.trim().length > 0
+                ? extraOptions.referenceId.trim()
+                : defaultReferenceId
+              const format = typeof extraOptions?.format === 'string' && extraOptions.format.trim().length > 0
+                ? extraOptions.format.trim()
+                : defaultFormat
+              const temperature = typeof extraOptions?.temperature === 'number' && Number.isFinite(extraOptions.temperature)
+                ? extraOptions.temperature
+                : defaultTemperature
+              const topP = typeof extraOptions?.topP === 'number' && Number.isFinite(extraOptions.topP)
+                ? extraOptions.topP
+                : defaultTopP
+              const repetitionPenalty = typeof extraOptions?.repetitionPenalty === 'number' && Number.isFinite(extraOptions.repetitionPenalty)
+                ? extraOptions.repetitionPenalty
+                : defaultRepetitionPenalty
+              const chunkLength = typeof extraOptions?.chunkLength === 'number' && Number.isFinite(extraOptions.chunkLength)
+                ? extraOptions.chunkLength
+                : defaultChunkLength
+
+              const payload = {
+                text: body.input,
+                references: [],
+                reference_id: referenceId || null,
+                format,
+                latency: 'normal',
+                max_new_tokens: 1024,
+                chunk_length: chunkLength,
+                top_p: topP,
+                repetition_penalty: repetitionPenalty,
+                temperature,
+                streaming: false,
+                use_memory_cache: 'off',
+                seed: null,
+              }
+
+              return await fetch(`${baseURL.endsWith('/') ? baseURL : `${baseURL}/`}tts`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/msgpack',
+                  ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+                },
+                body: encode(payload),
+              })
+            },
+          }),
+        }
+
+        return provider
+      },
+      capabilities: {
+        listModels: async () => {
+          return [
+            {
+              id: 's2-pro',
+              name: 'Fish Audio S2 Pro',
+              provider: 'fish-speech',
+              description: 'Fish Speech server-side TTS with inline expressive tags.',
+              contextLength: 0,
+              deprecated: false,
+            },
+          ]
+        },
+        listVoices: async (config) => {
+          const referenceId = typeof config.referenceId === 'string' ? config.referenceId.trim() : ''
+
+          return [
+            {
+              id: 'default',
+              name: referenceId ? `Default (${referenceId})` : 'Default Voice',
+              provider: 'fish-speech',
+              description: referenceId
+                ? `Server-side reference id: ${referenceId}`
+                : 'Use inline Fish tags like [soft], [angry], [old narrator] in the text.',
+              languages: [
+                { code: 'ko-KR', title: 'Korean' },
+                { code: 'en-US', title: 'English' },
+                { code: 'ja-JP', title: 'Japanese' },
+                { code: 'zh-CN', title: 'Chinese' },
+              ],
+            },
+          ]
+        },
+      },
+      validators: {
+        validateProviderConfig: async (config) => {
+          const errors: Error[] = []
+          const baseUrlValidation = baseUrlValidator.value(config.baseUrl)
+          if (baseUrlValidation) {
+            errors.push(...(baseUrlValidation.errors as Error[]))
+          }
+
+          if (errors.length > 0) {
+            return {
+              errors,
+              reason: errors.map(error => error.message).join(', '),
+              valid: false,
+            }
+          }
+
+          try {
+            const baseUrl = config.baseUrl as string
+            const response = await fetch(`${baseUrl}health`, {
+              headers: typeof config.apiKey === 'string' && config.apiKey.trim().length > 0
+                ? { Authorization: `Bearer ${config.apiKey.trim()}` }
+                : undefined,
+            })
+
+            if (!response.ok) {
+              errors.push(new Error(`Fish Speech health check failed with HTTP ${response.status}.`))
+            }
+          }
+          catch (error) {
+            errors.push(error instanceof Error ? error : new Error(String(error)))
+          }
+
+          return {
+            errors,
+            reason: errors.map(error => error.message).join(', '),
+            valid: errors.length === 0,
+          }
+        },
+      },
+    },
     'openai-audio-transcription': buildOpenAICompatibleProvider({
       id: 'openai-audio-transcription',
       name: 'OpenAI',
@@ -1124,6 +1444,205 @@ export const useProvidersStore = defineStore('providers', () => {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
             valid: !!config.apiKey && !!config.baseUrl,
+          }
+        },
+      },
+    },
+    'gpt-sovits': {
+      id: 'gpt-sovits',
+      category: 'speech',
+      tasks: ['text-to-speech', 'tts', 'voice-cloning', 'few-shot'],
+      nameKey: 'settings.pages.providers.provider.gpt-sovits.title',
+      name: 'GPT-SoVITS',
+      descriptionKey: 'settings.pages.providers.provider.gpt-sovits.description',
+      description: 'Few-shot voice cloning with Korean support via the official GPT-SoVITS API.',
+      icon: 'i-simple-icons:docker',
+      defaultOptions: () => ({
+        baseUrl: 'http://localhost:9880/',
+        model: 'gpt-sovits',
+        voice: 'reference',
+        refAudioPath: '',
+        promptText: '',
+        promptLang: 'ko',
+        textLang: 'ko',
+        mediaType: 'wav',
+        textSplitMethod: 'cut5',
+        topK: 15,
+        topP: 1,
+        temperature: 1,
+        speedFactor: 1,
+        repetitionPenalty: 1.35,
+      }),
+      createProvider: async (config) => {
+        const baseURL = typeof config.baseUrl === 'string' && config.baseUrl.trim().length > 0
+          ? config.baseUrl.trim()
+          : 'http://localhost:9880/'
+        const defaultRefAudioPath = typeof config.refAudioPath === 'string' ? config.refAudioPath.trim() : ''
+        const defaultPromptText = typeof config.promptText === 'string' ? config.promptText.trim() : ''
+        const defaultPromptLang = typeof config.promptLang === 'string' && config.promptLang.trim().length > 0
+          ? config.promptLang.trim()
+          : 'ko'
+        const defaultTextLang = typeof config.textLang === 'string' && config.textLang.trim().length > 0
+          ? config.textLang.trim()
+          : 'ko'
+        const defaultMediaType = typeof config.mediaType === 'string' && config.mediaType.trim().length > 0
+          ? config.mediaType.trim()
+          : 'wav'
+        const defaultTextSplitMethod = typeof config.textSplitMethod === 'string' && config.textSplitMethod.trim().length > 0
+          ? config.textSplitMethod.trim()
+          : 'cut5'
+        const defaultTopK = typeof config.topK === 'number' && Number.isFinite(config.topK)
+          ? config.topK
+          : 15
+        const defaultTopP = typeof config.topP === 'number' && Number.isFinite(config.topP)
+          ? config.topP
+          : 1
+        const defaultTemperature = typeof config.temperature === 'number' && Number.isFinite(config.temperature)
+          ? config.temperature
+          : 1
+        const defaultSpeedFactor = typeof config.speedFactor === 'number' && Number.isFinite(config.speedFactor)
+          ? config.speedFactor
+          : 1
+        const defaultRepetitionPenalty = typeof config.repetitionPenalty === 'number' && Number.isFinite(config.repetitionPenalty)
+          ? config.repetitionPenalty
+          : 1.35
+
+        const provider: SpeechProvider = {
+          speech: (model: string, extraOptions?: Record<string, unknown>) => ({
+            baseURL: baseURL.endsWith('/') ? baseURL : `${baseURL}/`,
+            model,
+            fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+              if (!init?.body || typeof init.body !== 'string') {
+                throw new Error('GPT-SoVITS request body is invalid.')
+              }
+
+              const body = JSON.parse(init.body) as Record<string, unknown>
+              const refAudioPath = typeof extraOptions?.refAudioPath === 'string' && extraOptions.refAudioPath.trim().length > 0
+                ? extraOptions.refAudioPath.trim()
+                : defaultRefAudioPath
+              const promptText = typeof extraOptions?.promptText === 'string'
+                ? extraOptions.promptText.trim()
+                : defaultPromptText
+              const promptLang = typeof extraOptions?.promptLang === 'string' && extraOptions.promptLang.trim().length > 0
+                ? extraOptions.promptLang.trim()
+                : defaultPromptLang
+              const textLang = typeof extraOptions?.textLang === 'string' && extraOptions.textLang.trim().length > 0
+                ? extraOptions.textLang.trim()
+                : defaultTextLang
+              const mediaType = typeof extraOptions?.mediaType === 'string' && extraOptions.mediaType.trim().length > 0
+                ? extraOptions.mediaType.trim()
+                : defaultMediaType
+              const textSplitMethod = typeof extraOptions?.textSplitMethod === 'string' && extraOptions.textSplitMethod.trim().length > 0
+                ? extraOptions.textSplitMethod.trim()
+                : defaultTextSplitMethod
+              const topK = typeof extraOptions?.topK === 'number' && Number.isFinite(extraOptions.topK)
+                ? extraOptions.topK
+                : defaultTopK
+              const topP = typeof extraOptions?.topP === 'number' && Number.isFinite(extraOptions.topP)
+                ? extraOptions.topP
+                : defaultTopP
+              const temperature = typeof extraOptions?.temperature === 'number' && Number.isFinite(extraOptions.temperature)
+                ? extraOptions.temperature
+                : defaultTemperature
+              const speedFactor = typeof extraOptions?.speedFactor === 'number' && Number.isFinite(extraOptions.speedFactor)
+                ? extraOptions.speedFactor
+                : defaultSpeedFactor
+              const repetitionPenalty = typeof extraOptions?.repetitionPenalty === 'number' && Number.isFinite(extraOptions.repetitionPenalty)
+                ? extraOptions.repetitionPenalty
+                : defaultRepetitionPenalty
+
+              const payload = {
+                text: body.input,
+                text_lang: textLang,
+                ref_audio_path: refAudioPath,
+                prompt_text: promptText,
+                prompt_lang: promptLang,
+                media_type: mediaType,
+                text_split_method: textSplitMethod,
+                top_k: topK,
+                top_p: topP,
+                temperature,
+                speed_factor: speedFactor,
+                repetition_penalty: repetitionPenalty,
+                streaming_mode: false,
+              }
+
+              return await fetch(`${baseURL.endsWith('/') ? baseURL : `${baseURL}/`}tts`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+              })
+            },
+          }),
+        }
+
+        return provider
+      },
+      capabilities: {
+        listModels: async () => {
+          return [
+            {
+              id: 'gpt-sovits',
+              name: 'GPT-SoVITS',
+              provider: 'gpt-sovits',
+              description: 'Official GPT-SoVITS API v2 style TTS endpoint.',
+              contextLength: 0,
+              deprecated: false,
+            },
+          ]
+        },
+        listVoices: async (config) => {
+          const refAudioPath = typeof config.refAudioPath === 'string' ? config.refAudioPath.trim() : ''
+          const promptLang = typeof config.promptLang === 'string' && config.promptLang.trim().length > 0
+            ? config.promptLang.trim()
+            : 'ko'
+
+          return [
+            {
+              id: 'reference',
+              name: refAudioPath ? 'Reference Voice' : 'Reference Voice (Path Required)',
+              provider: 'gpt-sovits',
+              description: refAudioPath
+                ? `Server reference audio: ${refAudioPath}`
+                : 'Enter a server-side reference audio path mounted inside the GPT-SoVITS container.',
+              languages: [
+                { code: `${promptLang}`, title: promptLang.toUpperCase() },
+                { code: 'ko', title: 'Korean' },
+                { code: 'en', title: 'English' },
+                { code: 'ja', title: 'Japanese' },
+                { code: 'zh', title: 'Chinese' },
+                { code: 'yue', title: 'Cantonese' },
+              ],
+            },
+          ]
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          const errors: Error[] = []
+          const baseUrlValidation = baseUrlValidator.value(config.baseUrl)
+          if (baseUrlValidation) {
+            errors.push(...(baseUrlValidation.errors as Error[]))
+          }
+
+          if (typeof config.refAudioPath !== 'string' || config.refAudioPath.trim().length <= 0) {
+            errors.push(new Error('Reference audio path is required.'))
+          }
+
+          if (typeof config.promptLang !== 'string' || config.promptLang.trim().length <= 0) {
+            errors.push(new Error('Prompt language is required.'))
+          }
+
+          if (typeof config.textLang !== 'string' || config.textLang.trim().length <= 0) {
+            errors.push(new Error('Text language is required.'))
+          }
+
+          return {
+            errors,
+            reason: errors.map(error => error.message).join(', '),
+            valid: errors.length === 0,
           }
         },
       },

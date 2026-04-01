@@ -20,6 +20,7 @@ const props = defineProps<{
   // Current state
   apiKeyConfigured?: boolean
   voicesLoading?: boolean
+  configurationErrorMessage?: string
 }>()
 
 const { t } = useI18n()
@@ -186,7 +187,7 @@ defineExpose({
       </button>
       <!-- Error messages -->
       <div v-if="!apiKeyConfigured" class="mt-2 text-sm text-red-500">
-        {{ t('settings.pages.providers.provider.elevenlabs.playground.validation.error-missing-api-key') }}
+        {{ props.configurationErrorMessage || t('settings.pages.providers.provider.elevenlabs.playground.validation.error-missing-api-key') }}
       </div>
       <div v-if="voicesLoading || !selectedVoice" class="mt-2 text-sm text-red-500">
         {{ voicesLoading ? t('settings.pages.modules.speech.sections.section.playground.select-voice.loading') : t('settings.pages.modules.speech.sections.section.playground.select-voice.required') }}

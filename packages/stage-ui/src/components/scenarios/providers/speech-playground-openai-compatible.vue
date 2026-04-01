@@ -16,6 +16,7 @@ const props = defineProps<{
 
   // Current state
   apiKeyConfigured?: boolean
+  configurationErrorMessage?: string
 }>()
 
 const emit = defineEmits(['update:modelValue', 'update:voice'])
@@ -172,7 +173,7 @@ defineExpose({
       </button>
       <!-- Error messages -->
       <div v-if="!apiKeyConfigured" class="mt-2 text-sm text-red-500">
-        {{ t('settings.pages.providers.provider.elevenlabs.playground.validation.error-missing-api-key') }}
+        {{ props.configurationErrorMessage || t('settings.pages.providers.provider.elevenlabs.playground.validation.error-missing-api-key') }}
       </div>
       <div v-if="errorMessage" class="mt-2 text-sm text-red-500">
         {{ errorMessage }}
